@@ -4,22 +4,19 @@
 # ## 概要
 # - 与えられたテーマをもとにして早押しクイズを生成する
 # - 入力：テーマ
-# - 出力：クイズ(質問、正解)
-
-# %%
-import random
-import numpy as np
-import os
-import json
-import pandas as pd
-
-import time
+# - 出力：クイズ(質問、正解, 出典)
 
 import argparse
+import json
+import os
+import random
+import time
 
+import numpy as np
 import openai
+import pandas as pd
 
-# %%
+
 def set_seed(seed: int = 42):
     random.seed(seed)
     np.random.seed(seed)
@@ -29,8 +26,6 @@ def set_seed(seed: int = 42):
 #    torch.backends.cudnn.deterministic = True
 #    torch.backends.cudnn.benchmark = False
 
-# %%
-
 openai.api_key = os.getenv("OPENAI_API_KEY")
 #OPENAI_MODEL="gpt-4"
 OPENAI_MODEL="gpt-3.5-turbo"
@@ -39,7 +34,6 @@ QG_GENERATE_MODEL="gpt-3.5-turbo"
 QG_REFINE_MODEL="gpt-3.5-turbo"
 
 
-# %%
 QG_SYSTEM_PROMPT = """あなたはプロのクイズ作家です。早押しクイズを作成して下さい。
 以下のルールを守ってください。
 
@@ -70,129 +64,149 @@ QG_REFINE_USER_PROMPT = """テーマ:{theme}
 正解:{answer}
 """
 
+def generate_quiz(theme, retry_max=0, interval=1):
 
-
-def generate_quiz(theme):
-
-
-    try:
-        completion = openai.ChatCompletion.create(
-#            model=OPENAI_MODEL,
-            model=QG_GENERATE_MODEL,
-            messages=[
-                {"role": "system", "content": QG_SYSTEM_PROMPT},
-                {"role": "user", "content": QG_USER_PROMPT.format(theme=theme)}
-            ],
-            functions=[
-                {
-                    "name": "generate_quiz",
-                    "description": "クイズを生成してjson形式で返す",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "question": {
-                                "type": "string", "description": "クイズ問題"
-                            },
-                            "answer": {
-                                "type": "string", "description": "正解"
-                            },
-#                            "distractors": {
-#                                "type": "array", "description": "不正解のリスト",
-#                                "items": {
-#                                    "type": "string", "description": "不正解"
-#                                }
-#                            }
-                        },
-#                        "required": ["question","answer","distractors"],
-                        "required": ["question","answer"],
-                    },
-                }
-            ],
-            function_call="auto",
-        )
-
-        message = completion["choices"][0]["message"]
+    def generate(theme):
         try:
-            return json.loads(message['function_call']['arguments'])
-        except KeyError:
-            # 前振り、後限定が個別に返されてしまう場合の対処
-            # {
-            #  "role": "assistant",
-            #  "content": "{\n\"question\": {\n\"\u524d\u632f\u308a\": \"\u30a2\u30cb\u30e1\u300c\u540d\u63a2\u5075\u30b3\u30ca\u30f3\u300d\u3067\u4e3b\u4eba\u516c\u30fb\u5de5\u85e4\u65b0\u4e00\u304c\u6bd2\u3092\u76db\u3089\u308c\u3066\u5c0f\u3055\u304f\u306a\u3063\u305f\u6642\u306b\u540d\u4e57\u3063\u305f\u540d\u524d\u306f\u3001\",\n\"\u5f8c\u9650\u5b9a\":\"\u3042\u308b\u6709\u540d\u306a\u4f5c\u5bb6\u306e\u540d\u524d\u304b\u3089\u53d6\u3089\u308c\u3066\u3044\u307e\u3059\u3002\u305d\u306e\u4f5c\u5bb6\u306e\u540d\u524d\u306f\u4f55\u3067\u3057\u3087\u3046\uff1f\"\n},\n\"answer\": \"\u30a2\u30fc\u30b5\u30fc\u30fb\u30b3\u30ca\u30f3\u30fb\u30c9\u30a4\u30eb\",\n\"distractors\": [\"\u30a2\u30ac\u30b5\u30fb\u30af\u30ea\u30b9\u30c6\u30a3\", \"\u30ed\u30a2\u30eb\u30c9\u30fb\u30c0\u30fc\u30eb\", \"\u30a8\u30c9\u30ac\u30fc\u30fb\u30a2\u30e9\u30f3\u30fb\u30dd\u30fc\"]\n}"
-            # }
-            try:
-                if message['content'] is not None:
-                    res = json.loads(message['content'])  # {}"question": { "前振り": ..., "後限定": ....}, "ansaer: ...}
-                    res['question'] = "".join(res['question'].values())
-                    return res
-            except:
-                pass
-    except: #  ServiceUnavailableError:
-        pass
-
-    return None
-
-def refine_quiz(quiz):
-
-    try:
-        completion = openai.ChatCompletion.create(
-#            model=OPENAI_MODEL,
-            model=QG_REFINE_MODEL,
-            messages=[
-                {"role": "system", "content": QG_REFINE_SYSTEM_PROMPT},
-                {"role": "user", "content": QG_REFINE_USER_PROMPT.format(theme=quiz['theme'],
-                                                                         question=quiz['question'],
-                                                                         answer=quiz['answer'])}
-            ],
-            functions=[
-                {
-                    "name": "refine_quiz",
-                    "description": "クイズを評価・修正してjson形式で返す",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "theme": {
-                                "type": "string", "description": "テーマ"
+            completion = openai.ChatCompletion.create(
+    #            model=OPENAI_MODEL,
+                model=QG_GENERATE_MODEL,
+                messages=[
+                    {"role": "system", "content": QG_SYSTEM_PROMPT},
+                    {"role": "user", "content": QG_USER_PROMPT.format(theme=theme)}
+                ],
+                functions=[
+                    {
+                        "name": "generate_quiz",
+                        "description": "クイズを生成してjson形式で返す",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "question": {
+                                    "type": "string", "description": "クイズ問題"
+                                },
+                                "answer": {
+                                    "type": "string", "description": "正解"
+                                },
+    #                            "distractors": {
+    #                                "type": "array", "description": "不正解のリスト",
+    #                                "items": {
+    #                                    "type": "string", "description": "不正解"
+    #                                }
+    #                            }
+    #                        },
+    #                        "required": ["question","answer","distractors"],
                             },
-                            "question": {
-                                "type": "string", "description": "クイズ問題"
-                            },
-                            "answer": {
-                                "type": "string", "description": "正解"
-                            },
+                            "required": ["question","answer"],
                         },
-                        "required": ["theme", "question","answer"],
-                    },
-                }
-            ],
-            function_call="auto",
-        )
+                    }
+                ],
+                function_call="auto",
+            )
 
-        message = completion["choices"][0]["message"]
-        try:
-            return json.loads(message['function_call']['arguments'])
-        except KeyError:
-            # 前振り、後限定が個別に返されてしまう場合の対処
-            # {
-            #  "role": "assistant",
-            #  "content": "{\n\"question\": {\n\"\u524d\u632f\u308a\": \"\u30a2\u30cb\u30e1\u300c\u540d\u63a2\u5075\u30b3\u30ca\u30f3\u300d\u3067\u4e3b\u4eba\u516c\u30fb\u5de5\u85e4\u65b0\u4e00\u304c\u6bd2\u3092\u76db\u3089\u308c\u3066\u5c0f\u3055\u304f\u306a\u3063\u305f\u6642\u306b\u540d\u4e57\u3063\u305f\u540d\u524d\u306f\u3001\",\n\"\u5f8c\u9650\u5b9a\":\"\u3042\u308b\u6709\u540d\u306a\u4f5c\u5bb6\u306e\u540d\u524d\u304b\u3089\u53d6\u3089\u308c\u3066\u3044\u307e\u3059\u3002\u305d\u306e\u4f5c\u5bb6\u306e\u540d\u524d\u306f\u4f55\u3067\u3057\u3087\u3046\uff1f\"\n},\n\"answer\": \"\u30a2\u30fc\u30b5\u30fc\u30fb\u30b3\u30ca\u30f3\u30fb\u30c9\u30a4\u30eb\",\n\"distractors\": [\"\u30a2\u30ac\u30b5\u30fb\u30af\u30ea\u30b9\u30c6\u30a3\", \"\u30ed\u30a2\u30eb\u30c9\u30fb\u30c0\u30fc\u30eb\", \"\u30a8\u30c9\u30ac\u30fc\u30fb\u30a2\u30e9\u30f3\u30fb\u30dd\u30fc\"]\n}"
-            # }
+            message = completion["choices"][0]["message"]
             try:
-                if message['content'] is not None:
-                    res = json.loads(message['content'])  # {}"question": { "前振り": ..., "後限定": ....}, "ansaer: ...}
-                    res['question'] = "".join(res['question'].values())
-                    return res
-            except:
-                pass
-    except: #  ServiceUnavailableError:
-        pass
+                return json.loads(message['function_call']['arguments'])
+            except KeyError:
+                # 前振り、後限定が個別に返されてしまう場合の対処
+                # {
+                #  "role": "assistant",
+                #  "content": {"question": { "前振り": ..., "後限定": ....}, "answer": ...}
+                # }
+                try:
+                    if message['content'] is not None:
+                        res = json.loads(message['content'])
+                        res['question'] = "".join(res['question'].values())
+                        return res
+                except:
+                    pass
+        except: #  ServiceUnavailableError:
+            pass
 
-    return None
+        return None
+
+    # サービス応答次第でリトライ
+    res = None
+    for _ in range(retry_max + 1):
+        res = generate(theme)
+        if res is not None:
+            break
+        time.sleep(interval)
+
+    return res
+
+
+def refine_quiz(quiz, retry_max=0, interval=1):
+
+    def refine(quiz):
+        try:
+            completion = openai.ChatCompletion.create(
+                model=QG_REFINE_MODEL,
+                messages=[
+                    {"role": "system", "content": QG_REFINE_SYSTEM_PROMPT},
+                    {"role": "user", "content": QG_REFINE_USER_PROMPT.format(theme=quiz['theme'],
+                                                                             question=quiz['question'],
+                                                                             answer=quiz['answer'])}
+                ],
+                functions=[
+                    {
+                        "name": "refine_quiz",
+                        "description": "クイズを評価・修正してjson形式で返す",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "theme": {
+                                    "type": "string", "description": "テーマ"
+                                },
+                                "question": {
+                                    "type": "string", "description": "クイズ問題"
+                                },
+                                "answer": {
+                                    "type": "string", "description": "正解"
+                                },
+                            },
+                            "required": ["theme", "question","answer"],
+                        },
+                    }
+                ],
+                function_call="auto",
+            )
+
+            message = completion["choices"][0]["message"]
+            try:
+                return json.loads(message['function_call']['arguments'])
+            except KeyError:
+                # 前振り、後限定が個別に返されてしまう場合の対処
+                # {
+                #  "role": "assistant",
+                #  "content": {"question": { "前振り": ..., "後限定": ....}, "answer": ...}
+                # }
+                try:
+                    if message['content'] is not None:
+                        res = json.loads(message['content'])
+                        res['question'] = "".join(res['question'].values())
+                        return res
+                except:
+                    pass
+        except: #  ServiceUnavailableError:
+            pass
+
+        return None
+
+    # サービス応答次第でリトライ
+    res = None
+    for _ in range(retry_max + 1):
+        res = refine(quiz)
+        if res is not None:
+            break
+        time.sleep(interval)
+
+    return res
 
 
 def main(args):
 
-    set_seed()
+    set_seed(args.seed)
 
     input_data = pd.read_json(args.input_file, lines=True)
     if args.sample > 0:
@@ -201,8 +215,9 @@ def main(args):
     data = [
         {
             "theme": theme,     # テーマ
-            "question": None,           # 問題文
-            "answer": None,             # 正解
+            "question": None,   # 問題文
+            "answer": None,     # 正解
+            "reference": None   # 出典
         } for theme in list(input_data["theme"])
     ]
 
@@ -211,39 +226,53 @@ def main(args):
             print("theme:    ", d['theme'])
 
         # クイズ生成
-        for _ in range(args.maxretry):
-            res = generate_quiz(d['theme'])
-            if res is not None:
-                break
+        res = generate_quiz(d['theme'],
+                            retry_max=args.retry_max, 
+                            interval=args.interval)
+        
+        if res is None:
+            if args.verbose:
+                print('failed to generate quiz')
             time.sleep(args.interval)
+            continue
+        
+        d['question'] = res['question']
+        d['answer'] = res['answer']
+        d['reference'] = QG_REFINE_MODEL
+        try:
+            d['reference'] = res['reference']
+        except KeyError:
+            pass
+
+        if args.verbose:
+            print("question:  ", d['question'])
+            print("answer:    ", d['answer'])
+            print("reference: ", d['reference'])
+
+        # 評価＋修正
+        res = refine_quiz(d,
+                          retry_max=args.retry_max,
+                          interval=args.interval)
+
+        if res is None:
             if args.verbose:
-                print("retry ...")
+                print('failed to refine quiz')
+            time.sleep(args.interval)
+            continue
 
-        if res is not None:
-            d['question'] = res['question']
-            d['answer'] = res['answer']
-            print("question: ", d['question'])
-            print("answer:   ", d['answer'])
+        d['question'] = res['question']
+        d['answer'] = res['answer']
+        d['reference'] = QG_REFINE_MODEL
+        try:
+            d['reference'] = res['reference']
+        except KeyError:
+            pass
 
-            # 評価＋修正
-            for _ in range(args.maxretry):
-                res = refine_quiz(d)
-                if res is not None:
-                    break
-                time.sleep(args.interval)
-                if args.verbose:
-                    print("retry ...")
+        if args.verbose:
+            print("refined_question:  ", d['question'])
+            print("refined_answer:    ", d['answer'])
+            print("refined_reference: ", d['reference'])
 
-            if res is not None:
-                d['question'] = res['question']
-                d['answer'] = res['answer']
-                if args.verbose:
-                    print("refined_question: ", d['question'])
-                    print("refined_answer:   ", d['answer'])
-            
-        else:
-            if args.verbose:
-                print('cannot generate quiz')
         time.sleep(args.interval)
 
     pd.DataFrame(data).to_json(args.output_file, orient='records', force_ascii=False, lines=True)
@@ -260,20 +289,24 @@ if __name__ == "__main__":
                         )
     parser.add_argument("--output_file",
                         type=str,
-                        default="output_generaetd.jsonl",
+                        default="output_data.jsonl",
                         help="OpenAIモデルの出力結果を格納するファイル。")
     parser.add_argument("--sample",
                         default=-1,
                         type=int,
-                        help="モデルに解かせる問題数。指定がない場合は全データに対して推論を行う。")
+                        help="モデルに与えるテーマ数。指定がない場合は全テーマに対して推論を行う。")
     parser.add_argument("--interval",
                         default=3,
                         type=int,
                         help="APIの最小呼び出し間隔。")
-    parser.add_argument('--maxretry',
-                        default=10,
+    parser.add_argument('--retry_max',
+                        default=0,
                         type=int,
                         help="API呼び出しの再試行上限")
+    parser.add_argument('--seed',
+                        default=42,
+                        type=int,
+                        help="乱数シード")
     parser.add_argument('--verbose',
                        action='store_true',
                        help="途中経過の出力")
