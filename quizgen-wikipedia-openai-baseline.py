@@ -51,7 +51,7 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 QG_SYSTEM_PROMPT = """あなたはプロのクイズ作家です。早押しクイズを作成して下さい。
 以下のルールを守ってください。
 
-・テーマに基づいて、問題文と答えからなる早押しクイズを作ってください。
+・以下に示すテーマに基づいて、問題文と答えからなる早押しクイズを作ってください。
 ・早押しクイズですので、問題文の前半の「前振り」、問題文の後半の「後限定」、そして「問題の答え」に分けて作ってください
 ・「前振り」は、答えを説明する修飾師です。できる限り、聞いてためになる情報を盛り込んでください。
 ・「後限定」は、文末は「でしょう？」で終わるようにしてください。ただし、「誰でしょう？」「何でしょう？」だけでなく、皆が知っているような、答えを確実に導き出せる確実な情報を入れて下さい。
@@ -78,17 +78,20 @@ QG_REFINE_USER_PROMPT = """テーマ:{theme}
 正解:{answer}
 """
 
-def generate_quiz(theme, retry_max=0, interval=1, model="gpt-3.5-turbo"):
+def generate_quiz(theme, retry_max=0, interval=1, model="gpt-3.5-turbo", debug=False):
 
     def generate(theme):
         try:
+            messages=[
+                {"role": "system", "content": QG_SYSTEM_PROMPT},
+                {"role": "user", "content": QG_USER_PROMPT.format(theme=theme)}
+            ]
+            if debug:
+                print(messages)
+            
             completion = openai.ChatCompletion.create(
-    #            model=OPENAI_MODEL,
                 model=model,
-                messages=[
-                    {"role": "system", "content": QG_SYSTEM_PROMPT},
-                    {"role": "user", "content": QG_USER_PROMPT.format(theme=theme)}
-                ],
+                messages=messages,
                 functions=[
                     {
                         "name": "generate_quiz",
@@ -118,6 +121,8 @@ def generate_quiz(theme, retry_max=0, interval=1, model="gpt-3.5-turbo"):
                 function_call="auto",
             )
 
+            if debug:
+                print(completion)
             message = completion["choices"][0]["message"]
             try:
                 return json.loads(message['function_call']['arguments'])
@@ -150,18 +155,22 @@ def generate_quiz(theme, retry_max=0, interval=1, model="gpt-3.5-turbo"):
     return res
 
 
-def refine_quiz(quiz, retry_max=0, interval=1, model="gpt-3.5-turbo"):
+def refine_quiz(quiz, retry_max=0, interval=1, model="gpt-3.5-turbo", debug=False):
 
     def refine(quiz):
         try:
+            messages=[
+                {"role": "system", "content": QG_REFINE_SYSTEM_PROMPT},
+                {"role": "user", "content": QG_REFINE_USER_PROMPT.format(theme=quiz['theme'],
+                                                                            question=quiz['question'],
+                                                                            answer=quiz['answer'])}
+            ]
+            if debug:
+                print(messages)
+
             completion = openai.ChatCompletion.create(
                 model=model,
-                messages=[
-                    {"role": "system", "content": QG_REFINE_SYSTEM_PROMPT},
-                    {"role": "user", "content": QG_REFINE_USER_PROMPT.format(theme=quiz['theme'],
-                                                                             question=quiz['question'],
-                                                                             answer=quiz['answer'])}
-                ],
+                messages=messages,
                 functions=[
                     {
                         "name": "refine_quiz",
@@ -185,6 +194,9 @@ def refine_quiz(quiz, retry_max=0, interval=1, model="gpt-3.5-turbo"):
                 ],
                 function_call="auto",
             )
+
+            if debug:
+                print(completion)
 
             message = completion["choices"][0]["message"]
             try:
@@ -217,35 +229,77 @@ def refine_quiz(quiz, retry_max=0, interval=1, model="gpt-3.5-turbo"):
 
     return res
 
-QG_MATERIAL_SYSTEM_PROMPT="""あなたはプロのクイズ作家です。クイズのよさを評価できます。
-以下に示す文章から、クイズの素材にふさわしい部分を抜き出してください。1か所200文字程度で抜き出してください。合計3か所を抜き出して、まとめて出力してください。
-
+QG_MATERIAL_SYSTEM_PROMPT="""あなたはプロのクイズ作家です。
+・以下の文章から、早押しクイズの問題文の前半「前振り」としてふさわしい区間と、問題文の後半の「後限定」としてふさわしい区間をそれぞれ抽出してください。
+・「前振り」は、答えを説明する修飾師です。できる限り、聞いてためになる情報を盛り込んでください。
+・「後限定」は、皆が知っているような、答えを確実に導き出せる確実な情報を含んでください。
+・1か所200文字程度で抜き出してください。
+・それぞれ1箇所、合計2か所を、リストにして出力してください。
 
 """
 
 QG_MATERIAL_USER_PROMPT = """文章: {content}
 """
 
-def pickup_quiz_material(theme, retry_max=0, interval=1, model="gpt-3.5-turbo"):
 
-    def generate(content):
+def pickup_quiz_material(theme, retry_max=0, interval=1, model="gpt-3.5-turbo", max_tokens=1500, debug=False):
+
+    def pickup(content):
 
         try:
+            messages=[
+                {"role": "system", "content": QG_MATERIAL_SYSTEM_PROMPT},
+                {"role": "user", "content": QG_MATERIAL_USER_PROMPT.format(content=content)}
+            ]
+            if debug:
+                print(messages)
+
             completion = openai.ChatCompletion.create(
                 model=model,
-                messages=[
-                    {"role": "system", "content": QG_MATERIAL_SYSTEM_PROMPT},
-                    {"role": "user", "content": QG_MATERIAL_USER_PROMPT.format(content=content)}
+                messages=messages,
+                max_tokens=max_tokens,
+                functions=[
+                    {
+                        "name": "refine_quiz",
+                        "description": "クイズを評価・修正してjson形式で返す",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "maefuri": {
+                                    "type": "string", 
+                                    "description": "前振り区間"
+                                },
+                                "atogentei": {
+                                    "type": "string", 
+                                    "description": "後限定区間"
+                                }
+                            },
+                            "required": ["maefuri", "atogentei"],
+                        },
+                    }
                 ],
-                max_tokens=1500
+                function_call="auto",
             )
 
+            if debug:
+                print(completion)
             message = completion["choices"][0]["message"]
             try:
-                return {'content': message['content']}
-            except KeyError:
-                pass
-        except: #  ServiceUnavailableError:
+                return json.loads(message['function_call']['arguments'])
+            except:
+                res = None
+                try:
+                    res = eval(message['function_call']['arguments'])   # セキュリティ上の懸念?
+                except:
+                    pass
+
+                if res is None:
+                    res =  {
+                        "maefuri": message['content'],
+                        "atogentei": ""
+                    }
+
+        except:
             pass
 
         return None
@@ -253,12 +307,13 @@ def pickup_quiz_material(theme, retry_max=0, interval=1, model="gpt-3.5-turbo"):
     # サービス応答次第でリトライ
     res = None
     for _ in range(retry_max + 1):
-        res = generate(theme)
+        res = pickup(theme)
         if res is not None:
             break
         time.sleep(interval)
 
     return res
+
 
 def main(args):
 
@@ -290,13 +345,16 @@ def main(args):
             res = pickup_quiz_material(content,
                                        retry_max=args.retry_max, 
                                        interval=args.interval,
-                                       model=args.material_model)
+                                       model=args.material_model,
+                                       debug=args.debug)
             if res is None:
                 if args.verbose:
                     print('failed to pickup material')
                 continue
 
-            material = res['content']
+#            material = res['content']
+            material = res['maefuri'] + res['atogentei']
+            material = material.replace("前振り:", '').replace("【前振り】", '').replace("後限定:", "").replace("【後限定】", "") # 姑息的
             d['reference'] = material
         else:
             material = d['theme']
@@ -305,7 +363,8 @@ def main(args):
         res = generate_quiz(material,
                             retry_max=args.retry_max, 
                             interval=args.interval,
-                            model=args.generation_model)
+                            model=args.generation_model,
+                            debug=args.debug)
         if res is None:
             if args.verbose:
                 print('failed to generate quiz')
@@ -322,7 +381,8 @@ def main(args):
             res = refine_quiz(d,
                             retry_max=args.retry_max,
                             interval=args.interval,
-                            model=args.refine_model)
+                            model=args.refine_model,
+                            debug=args.debug)
             if res is None:
                 if args.verbose:
                     print('failed to refine quiz')
@@ -384,12 +444,31 @@ if __name__ == "__main__":
                         default="gpt-3.5-turbo",
                         type=str,
                         help="クイズ修正のモデル"
-                        )    
+                        )
     parser.add_argument("--material_model",
                         default="gpt-3.5-turbo-16k",
                         type=str,
                         help="Wikipedia記事から素材抽出のモデル"
-                        )    
+                        )
+    parser.add_argument("--genreration_temperature",
+                        default=0.7,
+                        type=float,
+                        help="クイズ生成モデルの温度"
+                        )
+    parser.add_argument("--refine_temperature",
+                        default=0.7,
+                        type=float,
+                        help="クイズ修正モデルの温度"
+                        )
+    parser.add_argument("--material_temperature",
+                        default=0.7,
+                        type=float,
+                        help="素材抽出モデルの温度"
+                        )
+    parser.add_argument('--debug',
+                       action='store_true',
+                       help="デバグ向け情報を出力する")
+        
     args = parser.parse_args()
 
     main(args)
