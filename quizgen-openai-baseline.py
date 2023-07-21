@@ -1,4 +1,3 @@
-# %% [markdown]
 # # AI王 クイズ生成 ベースライン
 # 
 # ## 概要
@@ -222,6 +221,8 @@ def main(args):
     ]
 
     for d in data:
+        time.sleep(args.interval)
+
         if args.verbose:
             print("theme:    ", d['theme'])
 
@@ -233,7 +234,6 @@ def main(args):
         if res is None:
             if args.verbose:
                 print('failed to generate quiz')
-            time.sleep(args.interval)
             continue
         
         d['question'] = res['question']
@@ -257,7 +257,6 @@ def main(args):
         if res is None:
             if args.verbose:
                 print('failed to refine quiz')
-            time.sleep(args.interval)
             continue
 
         d['question'] = res['question']
@@ -272,8 +271,6 @@ def main(args):
             print("refined_question:  ", d['question'])
             print("refined_answer:    ", d['answer'])
             print("refined_reference: ", d['reference'])
-
-        time.sleep(args.interval)
 
     pd.DataFrame(data).to_json(args.output_file, orient='records', force_ascii=False, lines=True)
 
