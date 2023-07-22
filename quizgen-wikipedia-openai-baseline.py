@@ -51,15 +51,15 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 QG_SYSTEM_PROMPT = """あなたはプロのクイズ作家です。早押しクイズを作成して下さい。
 以下のルールを守ってください。
 
-・以下に示すテーマに基づいて、問題文と答えからなる早押しクイズを作ってください。
-・早押しクイズですので、問題文の前半の「前振り」、問題文の後半の「後限定」、そして「問題の答え」に分けて作ってください
-・「前振り」は、答えを説明する修飾師です。できる限り、聞いてためになる情報を盛り込んでください。
-・「後限定」は、文末は「でしょう？」で終わるようにしてください。ただし、「誰でしょう？」「何でしょう？」だけでなく、皆が知っているような、答えを確実に導き出せる確実な情報を入れて下さい。
+・以下に示すテーマに基づいて、問題文と正解からなる早押しクイズを作ってください。
+・早押しクイズですので、問題文の前半の「前振り」、問題文の後半の「後限定」、そして「正解」に分けて作ってください
+・「前振り」は、正解を説明する修飾師です。できる限り、聞いてためになる情報を盛り込んでください。
+・「後限定」は、文末は「でしょう？」で終わるようにしてください。ただし、「誰でしょう？」「何でしょう？」だけでなく、皆が知っているような、正解を確実に導き出せる確実な情報を入れて下さい。
 ・例を示します。
 前振り：小説『白鯨』に登場する捕鯨船の航海士に因んで名付けられた、
 後限定：シアトルに本拠地を置く世界的なコーヒーチェーンは何でしょう？
 ・「前振り」と「後限定」は最後につないで出力してください。自然な文章になるようにして下さい。
-・問題の答えとテーマが同じになることは避けてください。
+・正解とテーマが同じになることは避けてください。
 """
 # ・「問題の答え」は、正解の他に、外れ選択肢を３つ作ってください。正解がどれかも示して下さい。
 
@@ -78,7 +78,11 @@ QG_REFINE_USER_PROMPT = """テーマ:{theme}
 正解:{answer}
 """
 
-def generate_quiz(theme, retry_max=0, interval=1, model="gpt-3.5-turbo", debug=False):
+def generate_quiz(theme, 
+                  retry_max=0, 
+                  interval=1, 
+                  model="gpt-3.5-turbo", 
+                  debug=False):
 
     def generate(theme):
         try:
@@ -86,38 +90,41 @@ def generate_quiz(theme, retry_max=0, interval=1, model="gpt-3.5-turbo", debug=F
                 {"role": "system", "content": QG_SYSTEM_PROMPT},
                 {"role": "user", "content": QG_USER_PROMPT.format(theme=theme)}
             ]
+
+            functions=[
+                {
+                    "name": "generate_quiz",
+                    "description": "クイズを生成してjson形式で返す",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "question": {
+                                "type": "string", "description": "問題文"
+                            },
+                            "answer": {
+                                "type": "string", "description": "正解"
+                            },
+#                            "distractors": {
+#                                "type": "array", "description": "不正解のリスト",
+#                                "items": {
+#                                    "type": "string", "description": "不正解"
+#                                }
+#                            }
+#                        },
+#                        "required": ["question","answer","distractors"],
+                        },
+                        "required": ["question","answer"],
+                    },
+                }
+            ]
+
             if debug:
                 print(messages)
             
             completion = openai.ChatCompletion.create(
                 model=model,
                 messages=messages,
-                functions=[
-                    {
-                        "name": "generate_quiz",
-                        "description": "クイズを生成してjson形式で返す",
-                        "parameters": {
-                            "type": "object",
-                            "properties": {
-                                "question": {
-                                    "type": "string", "description": "クイズ問題"
-                                },
-                                "answer": {
-                                    "type": "string", "description": "正解"
-                                },
-    #                            "distractors": {
-    #                                "type": "array", "description": "不正解のリスト",
-    #                                "items": {
-    #                                    "type": "string", "description": "不正解"
-    #                                }
-    #                            }
-    #                        },
-    #                        "required": ["question","answer","distractors"],
-                            },
-                            "required": ["question","answer"],
-                        },
-                    }
-                ],
+                functions=functions,
                 function_call="auto",
             )
 
@@ -155,43 +162,55 @@ def generate_quiz(theme, retry_max=0, interval=1, model="gpt-3.5-turbo", debug=F
     return res
 
 
-def refine_quiz(quiz, retry_max=0, interval=1, model="gpt-3.5-turbo", debug=False):
+def refine_quiz(quiz, 
+                retry_max=0, 
+                interval=1, 
+                model="gpt-3.5-turbo", 
+                debug=False):
 
     def refine(quiz):
         try:
+            material = quiz['theme']
+            if quiz['reference'] is not None:
+                material = quiz['reference']
+
             messages=[
                 {"role": "system", "content": QG_REFINE_SYSTEM_PROMPT},
-                {"role": "user", "content": QG_REFINE_USER_PROMPT.format(theme=quiz['theme'],
+#                {"role": "user", "content": QG_REFINE_USER_PROMPT.format(theme=quiz['theme'],
+                {"role": "user", "content": QG_REFINE_USER_PROMPT.format(theme=material,
                                                                             question=quiz['question'],
                                                                             answer=quiz['answer'])}
             ]
+
+            functions=[
+                {
+                    "name": "refine_quiz",
+                    "description": "クイズを評価・修正してjson形式で返す",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "theme": {
+                                "type": "string", "description": "テーマ"
+                            },
+                            "question": {
+                                "type": "string", "description": "問題文"
+                            },
+                            "answer": {
+                                "type": "string", "description": "正解"
+                            },
+                        },
+                        "required": ["theme", "question","answer"],
+                    },
+                }
+            ]
+
             if debug:
                 print(messages)
 
             completion = openai.ChatCompletion.create(
                 model=model,
                 messages=messages,
-                functions=[
-                    {
-                        "name": "refine_quiz",
-                        "description": "クイズを評価・修正してjson形式で返す",
-                        "parameters": {
-                            "type": "object",
-                            "properties": {
-                                "theme": {
-                                    "type": "string", "description": "テーマ"
-                                },
-                                "question": {
-                                    "type": "string", "description": "クイズ問題"
-                                },
-                                "answer": {
-                                    "type": "string", "description": "正解"
-                                },
-                            },
-                            "required": ["theme", "question","answer"],
-                        },
-                    }
-                ],
+                functions=functions,
                 function_call="auto",
             )
 
@@ -242,7 +261,12 @@ QG_MATERIAL_USER_PROMPT = """文章: {content}
 """
 
 
-def pickup_quiz_material(theme, retry_max=0, interval=1, model="gpt-3.5-turbo", max_tokens=1500, debug=False):
+def pickup_quiz_material(theme, 
+                         retry_max=0, 
+                         interval=1, 
+                         model="gpt-3.5-turbo", 
+                         max_tokens=1500, 
+                         debug=False):
 
     def pickup(content):
 
@@ -251,33 +275,36 @@ def pickup_quiz_material(theme, retry_max=0, interval=1, model="gpt-3.5-turbo", 
                 {"role": "system", "content": QG_MATERIAL_SYSTEM_PROMPT},
                 {"role": "user", "content": QG_MATERIAL_USER_PROMPT.format(content=content)}
             ]
+
+            functions=[
+                {
+                    "name": "refine_quiz",
+                    "description": "クイズを評価・修正してjson形式で返す",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "maefuri": {
+                                "type": "string", 
+                                "description": "前振り"
+                            },
+                            "atogentei": {
+                                "type": "string", 
+                                "description": "後限定"
+                            }
+                        },
+                        "required": ["maefuri", "atogentei"],
+                    },
+                }
+            ]
+
             if debug:
                 print(messages)
 
             completion = openai.ChatCompletion.create(
                 model=model,
                 messages=messages,
+                functions=functions,
                 max_tokens=max_tokens,
-                functions=[
-                    {
-                        "name": "refine_quiz",
-                        "description": "クイズを評価・修正してjson形式で返す",
-                        "parameters": {
-                            "type": "object",
-                            "properties": {
-                                "maefuri": {
-                                    "type": "string", 
-                                    "description": "前振り区間"
-                                },
-                                "atogentei": {
-                                    "type": "string", 
-                                    "description": "後限定区間"
-                                }
-                            },
-                            "required": ["maefuri", "atogentei"],
-                        },
-                    }
-                ],
                 function_call="auto",
             )
 
@@ -298,6 +325,7 @@ def pickup_quiz_material(theme, retry_max=0, interval=1, model="gpt-3.5-turbo", 
                         "maefuri": message['content'],
                         "atogentei": ""
                     }
+                return res
 
         except:
             pass
@@ -339,7 +367,7 @@ def main(args):
             print("theme:    ", d['theme'])
 
         # クイズ素材部分の抽出
-        if args.use_wikipedia_content:
+        if args.from_wikipedia_content:
             content = get_wikipedia_content(d['theme'], content_len=6000)
 
             res = pickup_quiz_material(content,
@@ -355,6 +383,7 @@ def main(args):
 #            material = res['content']
             material = res['maefuri'] + res['atogentei']
             material = material.replace("前振り:", '').replace("【前振り】", '').replace("後限定:", "").replace("【後限定】", "") # 姑息的
+
             d['reference'] = material
         else:
             material = d['theme']
@@ -429,9 +458,9 @@ if __name__ == "__main__":
     parser.add_argument('--verbose',
                        action='store_true',
                        help="途中経過の出力")
-    parser.add_argument('--use_wikipedia_content',
+    parser.add_argument('--from_wikipedia_content',
                        action='store_true',
-                       help="Wikipedia記事のみ利用")
+                       help="テーマに基づくWikipedia記事のみ利用")
     parser.add_argument('--refine_quiz',
                        action='store_true',
                        help="生成したクイズを修正する")
