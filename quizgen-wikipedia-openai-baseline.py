@@ -58,22 +58,24 @@ QG_SYSTEM_PROMPT = """あなたはプロのクイズ作家です。早押しク�
 ・例を示します。
 前振り：小説『白鯨』に登場する捕鯨船の航海士に因んで名付けられた、
 後限定：シアトルに本拠地を置く世界的なコーヒーチェーンは何でしょう？
-・「前振り」と「後限定」は最後につないで出力してください。自然な文章になるようにして下さい。
+・「前振り」と「後限定」をつないで問題文を作ってください。自然な文章になるようにして下さい。
 ・正解とテーマが同じになることは避けてください。
+・作った問題文と正解を関数 generate_quiz に与えてください。
 """
-# ・「問題の答え」は、正解の他に、外れ選択肢を３つ作ってください。正解がどれかも示して下さい。
 
 QG_USER_PROMPT = """テーマ:{theme}
 """
 
-QG_REFINE_SYSTEM_PROMPT = """あなたはプロのクイズ作家です。早押しクイズをよりよいものに修正できます。
+QG_REVIEW_SYSTEM_PROMPT = """あなたはプロのクイズ作家です。早押しクイズをよりよいものに修正できます。
 以下のルールを守ってください。
 
-・以下に示す、テーマ、問題文、正解の組は、一般的なクイズとして適切であるならばそのまま出力してください。適切でないならば、適切なものになるよう。問題文または正解を修正してください。
+・以下に示す、問題文、正解の組は、一般的なクイズとして適切であるならばそのまま出力してください。適切でないならば、適切なものになるよう。問題文または正解を修正してください。
+・以下に示す、問題文、正解の組は、テーマの記述に沿っているならばそのまま出力してください。テーマの記述に含まれない内容ならば、テーマの記述のみに含まれるよう問題文または正解を修正してください。
+・修正した問題文と正解を関数 review_quiz に与えてください。
 """
 # ・「問題の答え」は、正解の他に、外れ選択肢を３つ作ってください。正解がどれかも示して下さい。
 
-QG_REFINE_USER_PROMPT = """テーマ:{theme}
+QG_REVIEW_USER_PROMPT = """テーマ:{theme}
 問題文:{question}
 正解:{answer}
 """
@@ -162,29 +164,29 @@ def generate_quiz(theme,
     return res
 
 
-def refine_quiz(quiz, 
+def review_quiz(quiz, 
                 retry_max=0, 
                 interval=1, 
                 model="gpt-3.5-turbo", 
                 debug=False):
 
-    def refine(quiz):
+    def review(quiz):
         try:
             material = quiz['theme']
             if quiz['reference'] is not None:
                 material = quiz['reference']
 
             messages=[
-                {"role": "system", "content": QG_REFINE_SYSTEM_PROMPT},
-#                {"role": "user", "content": QG_REFINE_USER_PROMPT.format(theme=quiz['theme'],
-                {"role": "user", "content": QG_REFINE_USER_PROMPT.format(theme=material,
+                {"role": "system", "content": QG_REVIEW_SYSTEM_PROMPT},
+#                {"role": "user", "content": QG_REVIEW_USER_PROMPT.format(theme=quiz['theme'],
+                {"role": "user", "content": QG_REVIEW_USER_PROMPT.format(theme=material,
                                                                             question=quiz['question'],
                                                                             answer=quiz['answer'])}
             ]
 
             functions=[
                 {
-                    "name": "refine_quiz",
+                    "name": "review_quiz",
                     "description": "クイズを評価・修正してjson形式で返す",
                     "parameters": {
                         "type": "object",
@@ -241,7 +243,7 @@ def refine_quiz(quiz,
     # サービス応答次第でリトライ
     res = None
     for _ in range(retry_max + 1):
-        res = refine(quiz)
+        res = review(quiz)
         if res is not None:
             break
         time.sleep(interval)
@@ -278,7 +280,7 @@ def pickup_quiz_material(theme,
 
             functions=[
                 {
-                    "name": "refine_quiz",
+                    "name": "review_quiz",
                     "description": "クイズを評価・修正してjson形式で返す",
                     "parameters": {
                         "type": "object",
@@ -405,23 +407,23 @@ def main(args):
             print("question:  ", d['question'])
             print("answer:    ", d['answer'])
 
-        if args.refine_quiz:
+        if args.review_quiz:
             # 評価＋修正
-            res = refine_quiz(d,
+            res = review_quiz(d,
                             retry_max=args.retry_max,
                             interval=args.interval,
-                            model=args.refine_model,
+                            model=args.review_model,
                             debug=args.debug)
             if res is None:
                 if args.verbose:
-                    print('failed to refine quiz')
+                    print('failed to review quiz')
                 continue
 
             d['question'] = res['question']
             d['answer'] = res['answer']
             if args.verbose:
-                print("refined_question:  ", d['question'])
-                print("refined_answer:    ", d['answer'])
+                print("reviewd_question:  ", d['question'])
+                print("reviewd_answer:    ", d['answer'])
 
     pd.DataFrame(data).to_json(args.output_file, orient='records', force_ascii=False, lines=True)
 
@@ -461,7 +463,7 @@ if __name__ == "__main__":
     parser.add_argument('--from_wikipedia_content',
                        action='store_true',
                        help="テーマに基づくWikipedia記事のみ利用")
-    parser.add_argument('--refine_quiz',
+    parser.add_argument('--review_quiz',
                        action='store_true',
                        help="生成したクイズを修正する")
     parser.add_argument("--generation_model",
@@ -469,7 +471,7 @@ if __name__ == "__main__":
                         type=str,
                         help="クイズ生成のモデル"
                         )
-    parser.add_argument("--refine_model",
+    parser.add_argument("--review_model",
                         default="gpt-3.5-turbo",
                         type=str,
                         help="クイズ修正のモデル"
@@ -484,7 +486,7 @@ if __name__ == "__main__":
                         type=float,
                         help="クイズ生成モデルの温度"
                         )
-    parser.add_argument("--refine_temperature",
+    parser.add_argument("--review_temperature",
                         default=0.7,
                         type=float,
                         help="クイズ修正モデルの温度"
