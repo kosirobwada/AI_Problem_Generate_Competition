@@ -3,6 +3,7 @@
 - クイズ作問部門のベースライン実装としての、OpenAI APIを用いた実装です。
 - テーマを入力として、早押しクイズの問題文と正解の対を出力します。
 - OpenAI API の rate limit に対する処理、function callingで期待する応答が得られない場合の処理が十分ではありません。参考としての位置づけとしてご了承ください。
+  - function callingを用いない `quizgen-wikipedia-openai-baseline-nofunccall.py` を合わせて用意しています。
 
 
 ## 環境
@@ -38,7 +39,15 @@ JSONL形式でテーマを並べます。
 
 ## 利用方法
 
-- 作問の素材をテーマに関連するwikipedia本文に限定する `--from_wikipedia_content`、一度生成したクイズを評価して見直す `--refine_quiz` を用意しています。意図通りに動作しないこともあり、あくまでもご参考です。
+```bash
+python ./quizgen-wikipedia-openai-baseline.py input_data.jsonl --output_file output_`date +%Y%m%d-%H%M%S`.jsonl --verbose --debug 
+```
+
+
+- 意図通りに動作しないこともあり、あくまでご参考ですが、以下のオプションを用意しています。
+  - `--from_wikipedia_content` : 作問の素材をテーマに関連するwikipedia本文に限定する
+  - `--refine_quiz`  : 一度生成したクイズを評価して見直す
+
 
 ```bash
 python ./quizgen-wikipedia-openai-baseline.py input_data.jsonl --output_file output_`date +%Y%m%d-%H%M%S`.jsonl --verbose  --from_wikipedia_content --refine_quiz  --refine--retry_max 1 --debug 
