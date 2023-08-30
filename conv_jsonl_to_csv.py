@@ -7,7 +7,7 @@ def main(args):
     print(df)
 
     df.columns = ['theme', 'question', 'answer', 'reference']
-    df.to_csv(args.output_file,  encoding='utf_8_sig')
+    df.to_csv(args.output_file,  index=None, encoding='utf_8_sig')
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

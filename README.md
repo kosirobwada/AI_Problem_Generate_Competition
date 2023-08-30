@@ -30,17 +30,24 @@ JSONL形式でテーマを並べます。
 
 入力に対応する形で、問題文と正解のペアが並びます。
 
-```json
+jsonl
 ```json
 {"theme":"フェルマーの最終定理","question":" ...", "answer": ".."}
 {"theme":"カーボンニュートラル","question":" ...", "answer": ".."}
-...
+```
+
+csv
+```csv
+theme,question,answer,reference
+フェルマーの最終定理,....
+カーボンニュートラル,...
 ```
 
 ## 利用方法
 
 ```bash
-python ./quizgen-wikipedia-openai-baseline.py input_data.jsonl --output_file output_`date +%Y%m%d-%H%M%S`.jsonl --verbose --debug 
+python ./quizgen-wikipedia-openai-baseline.py input_data.jsonl --output_file output_data.jsonl --verbose --debug 
+python ./conv_jsonl_to_csv.py output_data.jsonl output_data.csv
 ```
 
 
@@ -50,7 +57,8 @@ python ./quizgen-wikipedia-openai-baseline.py input_data.jsonl --output_file out
 
 
 ```bash
-python ./quizgen-wikipedia-openai-baseline.py input_data.jsonl --output_file output_`date +%Y%m%d-%H%M%S`.jsonl --verbose  --from_wikipedia_content --refine_quiz  --refine--retry_max 1 --debug 
+python ./quizgen-wikipedia-openai-baseline.py input_data.jsonl --output_file output_data.jsonl --verbose  --from_wikipedia_content --refine_quiz  --refine--retry_max 1 --debug 
+python ./conv_jsonl_to_csv.py output_data.jsonl output_data.csv
 ```
 
 ## ライセンス
