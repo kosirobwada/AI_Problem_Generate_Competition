@@ -4,7 +4,7 @@
 - テーマを入力として、早押しクイズの問題文と正解の対を出力します。
 - OpenAI API の rate limit に対する処理、function callingで期待する応答が得られない場合の処理が十分ではありません。参考としての位置づけとしてご了承ください。
   - function callingを用いない `quizgen-wikipedia-openai-baseline-nofunccall.py` を合わせて用意しています。
-
+- 2023/08/31 以降、コードの変更は行いません。
 
 ## 環境
 
