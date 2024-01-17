@@ -40,11 +40,6 @@ def set_seed(seed: int = 42):
     random.seed(seed)
     np.random.seed(seed)
     os.environ["PYTHONHASHSEED"] = str(seed)
-#    torch.manual_seed(seed)
-#    torch.cuda.manual_seed(seed)
-#    torch.backends.cudnn.deterministic = True
-#    torch.backends.cudnn.benchmark = False
-
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
 
@@ -106,14 +101,6 @@ def generate_quiz(theme,
                             "answer": {
                                 "type": "string", "description": "正解"
                             },
-#                            "distractors": {
-#                                "type": "array", "description": "不正解のリスト",
-#                                "items": {
-#                                    "type": "string", "description": "不正解"
-#                                }
-#                            }
-#                        },
-#                        "required": ["question","answer","distractors"],
                         },
                         "required": ["question","answer"],
                     },
@@ -136,11 +123,6 @@ def generate_quiz(theme,
             try:
                 return json.loads(message['function_call']['arguments'])
             except KeyError:
-                # 前振り、後限定が個別に返されてしまう場合の対処
-                # {
-                #  "role": "assistant",
-                #  "content": {"question": { "前振り": ..., "後限定": ....}, "answer": ...}
-                # }
                 try:
                     if message['content'] is not None:
                         res = json.loads(message['content'])
@@ -223,11 +205,6 @@ def review_quiz(quiz,
             try:
                 return json.loads(message['function_call']['arguments'])
             except KeyError:
-                # 前振り、後限定が個別に返されてしまう場合の対処
-                # {
-                #  "role": "assistant",
-                #  "content": {"question": { "前振り": ..., "後限定": ....}, "answer": ...}
-                # }
                 try:
                     if message['content'] is not None:
                         res = json.loads(message['content'])

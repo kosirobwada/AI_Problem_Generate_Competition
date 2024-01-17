@@ -45,7 +45,7 @@ def set_seed(seed: int = 42):
 #    torch.backends.cudnn.deterministic = True
 #    torch.backends.cudnn.benchmark = False
 
-openai.api_key = os.getenv("OPENAI_API_KEY")
+#openai.api_key = os.getenv("OPENAI_API_KEY")
 
 
 QG_SYSTEM_PROMPT = """あなたはプロのクイズ作家です。早押しクイズを作成して下さい。
