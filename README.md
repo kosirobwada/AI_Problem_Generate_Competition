@@ -45,7 +45,7 @@ theme,question,answer,reference
 
 
 ## 利用方法
-
+基本的にはFinal_round内のans.pyを動かすのがよいと思います。
 ```bash
 python ./FInal_round/ans.py
 ```
